@@ -1,0 +1,24 @@
+{
+    "context": "client",
+    "identifier": "info.nanodesu.pachat",
+    "display_name": "PA Chat",
+    "description": "Add more chat features, mainly a global chatroom",
+    "author": "Cola_Colin",
+    "version": "1.0",
+    "signature": "not yet implemented",
+    "priority": 100,
+    "enabled": true,
+    "id": "pachat",
+    "category": [
+        "UI"
+    ],
+    "scenes": {
+        "uberbar": [
+        	"coui://ui/mods/pachat/jabber.js",
+        	"coui://ui/mods/pachat/uberbar.css",
+        	"coui://ui/mods/pachat/uberbar.js"
+        ]
+    },
+    "date": "2015/1/30",
+    "build": "76766"
+}
