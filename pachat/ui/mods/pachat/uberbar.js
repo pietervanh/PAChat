@@ -267,18 +267,23 @@
 //		}
 		
 		if (grpChat) {
+			var isAdmin = userinfo.affiliation === "owner" || userinfo.affiliation === "admin";
+			var isModerator = userinfo.role === "moderator";
 			if (uid !== model.uberId() || pt !== "unavailable") {
 				var r = model.chatRoomMap()[chatRoom];
 				if (!(r && r.usersMap()[nameInChannel])) {
 					var userModel = makeChatRoomUser(uid, 
-							userinfo.affiliation === "owner" || userinfo.affiliation === "admin",
-							userinfo.role === "moderator",
+							isAdmin,
+							isModerator,
 							userinfo.league,
 							userinfo.rank,
 							nameInChannel);
 					model.insertUserIntoRoom(chatRoom, userModel);
 				} else if (pt === "unavailable"){
 					model.removeUserFromRoom(chatRoom, nameInChannel);
+				} else if (r.usersMap()[nameInChannel]){
+					r.usersMap()[nameInChannel].isModerator(isModerator);
+					r.usersMap()[nameInChannel].isAdmin(isAdmin);
 				}
 			} else {
 				delete model.chatRoomMap()[chatRoom];

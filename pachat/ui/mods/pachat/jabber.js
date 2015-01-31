@@ -508,9 +508,9 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 					
 // trigger the fix in the presencehandler in uberbar.js. undefined, undefined prevents this from doing anything else
 // so make sure all jabber friends are known as "friends" by PA.
-if (paPresenceHandler) {
-	paPresenceHandler(JidToUberid(jid), undefined, undefined, from.indexOf(CONFERENCE_URL) !== -1);
-}
+//if (paPresenceHandler) {
+//	paPresenceHandler(JidToUberid(jid), undefined, undefined, from.indexOf(CONFERENCE_URL) !== -1);
+//}
 					log('!!!   jid:' + jid + ' name:' + name + ' sub:' + sub
 							+ ' ask:' + ask);
 					connection.send($pres({
