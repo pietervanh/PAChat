@@ -186,18 +186,19 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	
 	/////////// PA CHAT
 	
-	self.leaveGroupChat = function(roomName) {
+	self.leaveGroupChat = function(roomName, name) {
 		if (!connection.connected || !roomName) {
 			return;
 		}
-		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+self.uberId(), type: "unavailable"}));
+		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+name, type: "unavailable"}));
 	};
 	
-	self.joinGroupChat = function(roomName, rank) {
+	self.joinGroupChat = function(roomName, league, rank, name) {
 		if (!connection.connected || !roomName || !self.jid()) {
 			return;
 		}
-		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+self.uberId() + "+" + rank}));
+		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+name,
+			league: league, rank: rank}));
 	};
 	
 	self.sendGroupChat = function(roomName, message) {
@@ -207,26 +208,6 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		connection.send($msg({to: roomName+"@"+CONFERENCE_URL, type: "groupchat"}).c('body').t(message));
 	};
 	
-	// TODO, probably this code does not work
-//	self.kickUser = function(roomName, uberId) {
-//		if (!connection.connected || !roomName || !message) {
-//			return;
-//		}
-//		
-//		var jid = UberidToJid(uberid);
-//		
-//		var iq = $iq({
-//			type : 'set'
-//		}).c('query', {
-//			xmlns : 'http://jabber.org/protocol/muc#admin',
-//		}).c("item", {
-//			jid: jid,
-//			role: 'none'
-//		});
-//		connection.send(iq);
-//	};
-
-	
 	/////////// PA CHAT
 	
 	self.sendCommand = function(uberid, type, payload) {
@@ -235,7 +216,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 			message_type : type,
 			payload : payload
 		});
-		log(message)
+		log(message);
 		connection.send($msg({
 			to : jid,
 			type : 'command'
@@ -342,8 +323,6 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	
 	function onGrpChat(message) {
 		try {
-			log("onGrpChatHandler");
-			
 			var x = message.getElementsByTagName("x");
 
 			var stati = [];
@@ -356,17 +335,14 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 				}
 			}
 			
+			var body = message.getElementsByTagName('body');
+			
 			var from = $(message).attr('from');
 			var room = from.split('@')[0];
-			var user = from.split("/")[1];
-			if (user) {
-				user = user.split("+")[0];
-			}
 			
-			var body = message.getElementsByTagName('body');
 			var content = '';
 			if (Strophe.getText(body[0]))
-				content = Strophe.getText(body[0]);
+				content = htmlSpecialChars(Strophe.getText(body[0]), true);
 			
 			var delay = message.getElementsByTagName("delay");
 			var timestamp = new Date().getTime();
@@ -380,7 +356,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 				}
 			}
 			
-			paGrpMsgHandler(room, user, stati, content, timestamp);
+			paGrpMsgHandler(room, from, stati, content, timestamp);
 		} catch (e) {
 			log("!!! group chat error");
 			console.log(e);
@@ -433,12 +409,16 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 				var chatRoom = undefined;
 				var userinfo = {};
 				var stati = [];
-				
-				var spl = from.split("+");
-				userinfo.rank = spl.length > 1 ? spl[spl.length-1] : undefined;
+				var fullChannelName = undefined;
 				
 				if (isGrpChat) {
-					chatRoom = user;
+					chatRoom = user; // for grp chats the name of the room is in front of the @conference.xmpp....
+					
+					fullChannelName = from;
+					
+					userinfo.league = $(message).attr('league');
+					userinfo.rank = $(message).attr('rank');
+					
 					var x = message.getElementsByTagName("x");
 					
 					if (x && x.length > 0) {
@@ -450,6 +430,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 									userinfo.affiliation = $(child[0]).attr("affiliation");
 									userinfo.role = $(child[0]).attr("role");
 									user = JidToUberid($(child[0]).attr("jid"));
+									
 								} else if (child[0].nodeName === "status") {
 									// probably required to handle kick/ban messages
 								}
@@ -469,7 +450,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 				}
 				
 				paPresenceHandler(user, type || 'available',
-						status, isGrpChat, chatRoom, userinfo, stati);
+						status, isGrpChat, chatRoom, userinfo, stati, fullChannelName);
 				
 				 // PA CHAT
 			}

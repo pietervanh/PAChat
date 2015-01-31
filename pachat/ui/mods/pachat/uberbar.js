@@ -7,7 +7,7 @@
 		         $(element).resizable(options);
 		    }  
 		};
-	
+
 	// had to copy this due to visibility reasons, unmodified function
 	/* an ubernet user you have encounterd: includes friends, recent contacts, ignored, blocked */
     function UserViewModel(id) {
@@ -210,33 +210,44 @@
     };
     // end of copied code
 	
-	var makeChatRoomUser = function(uberid, admin, mod, rankData) {
+	var makeChatRoomUser = function(uberid, admin, mod, league, rank, fullChannelName) {
 		var obj = new UserViewModel(uberid);
 		obj.isModerator = ko.observable(mod);
 		obj.isAdmin = ko.observable(admin);
-		obj.rank = ko.observable("provisional");
-		obj.rankImg = ko.computed(function() {
-			return MatchmakingUtility.getSmallBadgeURL(obj.rank());
+		obj.league = ko.observable("unranked");
+		obj.leagueImg = ko.computed(function() {
+			return MatchmakingUtility.getSmallBadgeURL(obj.league());
 		});
 		
-		if (rankData) { 
-			obj.rank(rankData);
+		obj.hasLeagueImage = ko.computed(function() {
+			return obj.leagueImg() !== undefined && obj.leagueImg() !== "";
+		});
+		
+		if (league) { 
+			obj.league(league);
 		}
 		
-        // PA CHAT
+		obj.rank = ko.observable(rank);
+		obj.displayRank = ko.computed(function() {
+			if (obj.rank()) {
+				return "#"+obj.rank();
+			} else {
+				return undefined;
+			}
+		});
+		
+		obj.fullChannelName = ko.observable(fullChannelName);
+		
         obj.displayNameComputed = ko.computed(function() {
-        	return (obj.displayName() ? obj.displayName() : obj.uberId())+"";
+        	var spl = obj.fullChannelName().split("/")[1];
+        	return spl ? unescape(spl) : undefined;
         });
-        // PA CHAT
 		
 		return obj;
 	};
 	
 	var oldPresence = model.onPresence;
-	model.onPresence = function(uid, pt, ps, grpChat, chatRoom, userinfo, stati) {
-		
-		console.log(arguments);
-		
+	model.onPresence = function(uid, pt, ps, grpChat, chatRoom, userinfo, stati, nameInChannel) {
 		if (uid && !grpChat) { // a fix for cases of "my friendlist is empty"
 			var tagMap = model.userTagMap();
 			var tags = tagMap[uid] || {};
@@ -256,19 +267,25 @@
 		if (grpChat) {
 			if (uid !== model.uberId() || pt !== "unavailable") {
 				var r = model.chatRoomMap()[chatRoom];
-				if (!(r && r.usersMap()[uid])) {
-					var userModel = makeChatRoomUser(uid, userinfo.affiliation === "owner" 
-						|| userinfo.affiliation === "admin", userinfo.role === "moderator", userinfo.rank);
+				if (!(r && r.usersMap()[nameInChannel])) {
+					var userModel = makeChatRoomUser(uid, 
+							userinfo.affiliation === "owner" || userinfo.affiliation === "admin",
+							userinfo.role === "moderator",
+							userinfo.league,
+							userinfo.rank,
+							nameInChannel);
 					model.insertUserIntoRoom(chatRoom, userModel);
-				} else {
-					model.removeUserFromRoom(chatRoom, uid);
+				} else if (pt === "unavailable"){
+					model.removeUserFromRoom(chatRoom, nameInChannel);
 				}
 			} else {
 				delete model.chatRoomMap()[chatRoom];
 				model.chatRoomMap.notifySubscribers();
 			}
 		}
-		oldPresence(uid, pt, ps);
+		if (!grpChat || uid !== model.uberId()) {
+			oldPresence(uid, pt, ps);
+		}
 	};
 
 	var oldMessage = model.onMessage;
@@ -289,13 +306,15 @@
 				userModel = r.usersMap()[user];
 			}
 			if (!userModel) {
-				userModel = makeChatRoomUser(user, false, false); // TODO this might not work correctly on joining if the presence and the messages are switched up
+				userModel = makeChatRoomUser(undefined, false, false, undefined, undefined, user);
 			}
-			model.insertMessageIntoRoom(room, {
-				user: userModel,
-				content: content,
-				time: timestamp
-			});
+			if (userModel.displayNameComputed() !== undefined) {
+				model.insertMessageIntoRoom(room, {
+					user: userModel,
+					content: content,
+					time: timestamp
+				});
+			}
 			
 			if (content.indexOf(model.displayName()) !== -1 && (new Date().getTime() - timestamp) < 10 * 1000) {
 				api.game.outOfGameNotification("You were mentioned in channel " + room + " by " + userModel.displayNameComputed());
@@ -316,13 +335,15 @@
 		}
 	};
 	
+	model.myLeague = ko.observable();
 	model.myRank = ko.observable();
 	
 	var initRank = function(cb) {
         engine.asyncCall('ubernet.getPlayerRating', 'Ladder1v1').done(function (data) {
         	try {
         		var d = JSON.parse(data);
-        		model.myRank(d.Rating)
+        		model.myLeague(d.Rating)
+        		model.myRank(d.LeaderboardPosition > 0 ? (d.LeaderboardPosition+"") : "Inactive");
         	} catch (e) {
         		console.log("failed to get player rank!");
         		console.log(e);
@@ -421,7 +442,7 @@
 				self.writeSystemMessage("You can write the beginning of a name and press tab to autocomplete.");
 				self.writeSystemMessage("Available commands, try /help <command> for more info: announcelobby join");
 			} else if (cmd.startsWith("/help announcelobby")) {
-				self.writeSystemMessage("/announcelobby <msg> can be used to advertise a lobby you are currently in. Only works while in a public lobby")
+				self.writeSystemMessage("/announcelobby <msg> can be used to advertise a lobby you are currently in. Only works while in a public lobby");
 			} else if (cmd.startsWith("/help join")) {
 				self.writeSystemMessage("/join <channelname> joins a chatchannel. If the channel does not exist it will be created");
 			} else if (cmd.startsWith("/announcelobby")) {
@@ -438,7 +459,7 @@
 		};
 		
 		self.writeSystemMessage = function(msg) {
-			var fake = makeChatRoomUser(model.uberId(), false, false);
+			var fake = makeChatRoomUser(model.uberId(), false, false, undefined, undefined, "");
 			fake.displayNameComputed = ko.observable("");
 			self.addMessage({
 				user: fake,
@@ -455,11 +476,8 @@
 				if (lastWord) {
 					for (var i = 0; i < self.sortedUsers().length; i++) {
 						var user = self.sortedUsers()[i];
-						
-						console.log(user.displayName() + " vs " + lastWord);
-						
-						if (user.displayName().startsWith(lastWord)) {
-							candidates.push(user.displayName());
+						if (user.displayNameComputed().startsWith(lastWord)) {
+							candidates.push(user.displayNameComputed());
 						}
 					}
 				}
@@ -512,12 +530,12 @@
 	};
 	
 	model.insertUserIntoRoom = function(roomName, user) {
-		getOrCreateRoom(roomName).usersMap()[user.uberId()] = user;
+		getOrCreateRoom(roomName).usersMap()[user.fullChannelName()] = user;
 		getOrCreateRoom(roomName).usersMap.notifySubscribers();
 	};
 	
-	model.removeUserFromRoom = function(roomName, userid) {
-		delete getOrCreateRoom(roomName).usersMap()[userid];
+	model.removeUserFromRoom = function(roomName, nameInChannel) {
+		delete getOrCreateRoom(roomName).usersMap()[nameInChannel];
 		getOrCreateRoom(roomName).usersMap.notifySubscribers();
 	};
 	
@@ -531,29 +549,38 @@
 		if (room) {
 			room.minimized(false);
 		} else {
-			jabber.joinGroupChat(roomName, model.myRank());
+			jabber.joinGroupChat(roomName, model.myLeague(), model.myRank(), model.displayName());
 		}
 	};
 	
 	model.leaveRoom = function(roomName) {
 		var room = model.chatRoomMap()[roomName];
 		if (room) {
-			jabber.leaveGroupChat(room.roomName());
+			jabber.leaveGroupChat(room.roomName(), model.displayName());
 		}
 	}
 	
 	var oldContextMenu = model.contextMenuForContact;
 	model.contextMenuForContact = function(data, event) {
-		if (data.uberId() !== model.uberId() && event.type === "contextmenu") { // knockout should do this for me, but somehow it does not?!
+		if (event && data && data.uberId() !== model.uberId() && event.type === "contextmenu") { // knockout should do this for me, but somehow it does not?!
 			oldContextMenu(data, event);
 		}
 	}
 	
+	var setPresenceForUberbarVisibility = function(v) {
+		if (jabber) {
+			if (v) {
+				jabber.presenceType("dnd");
+			} else {
+				jabber.presenceType("available");
+			}
+		}
+	};
+	
+	model.showUberBar.subscribe(setPresenceForUberbarVisibility);
+	setPresenceForUberbarVisibility(model.showUberBar());
 	
 	model.joinChannelName = ko.observable('');
-	
-	
-	
 	
 	// black magic http://stackoverflow.com/questions/805107/creating-multiline-strings-in-javascript/5571069#5571069
 	function multiLines(f) {
@@ -575,11 +602,11 @@
 		
                 <!-- ko foreach: chatRooms -->
                 <div class="div-win" style="margin-bottom:-36px;">
-                    <div class="div-chat-room-window" data-bind="resizable: {minWidth: 300, handles : 'w', resize: function(event,ui) {$('.div-chat-room-window').css('left', 0);}}">
+                    <div class="div-chat-room-window" data-bind="resizable: {minWidth: 300, handles : 'w', resize: function(event,ui) {$('.div-chat-room-window').css('left', 0); scrollDown();}}">
                         <div class="div-chat-header" data-bind="css: { 'dirty': dirty }, click: toggleMinimized">
                             <div class="div-chat-room-title">
 								<!-- ko ifnot: minimized -->
-								<div class="div-chat-room-name" data-bind="text: roomName()+' - chat provided by PA Stats. Try /help'"></div>
+								<div class="div-chat-room-name ellipsesoverflow" data-bind="text: roomName()+' - chat provided by PA Stats. Try /help'"></div>
 								<!-- /ko -->
 								<!-- ko if: minimized -->
 								<div class="chat_message_preview">
@@ -618,8 +645,11 @@
                             </div>
 							<div class="div-chat-room-users ">
 								<!-- ko foreach: sortedUsers -->
-								<div class="chat_user" data-bind="event: {contextmenu: model.contextMenuForContact}">
-									<img width="24px" height="20px" data-bind="attr: {src: rankImg()}" />
+								<div class="chat_user ellipsesoverflow" data-bind="event: {contextmenu: model.contextMenuForContact}">
+									<div class="status-visual" data-bind="css: { 'online': available, 'offline': offline, 'away': away, 'dnd': dnd }"></div>
+									<!-- ko if: hasLeagueImage -->
+									<img data-placement="right" width="24px" height="20px" data-bind="attr: {src: leagueImg()}, tooltip: displayRank()" />
+									<!-- /ko -->
 									<span data-bind="css: {'chat-room-user-name': !isModerator() && !isAdmin(),
 															'chat-room-moderator-name': isModerator() && !isAdmin(),
 															'chat-room-admin-name': isAdmin()}, text: displayNameComputed"></span>
