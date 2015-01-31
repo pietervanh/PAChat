@@ -248,21 +248,23 @@
 	
 	var oldPresence = model.onPresence;
 	model.onPresence = function(uid, pt, ps, grpChat, chatRoom, userinfo, stati, nameInChannel) {
-		if (uid && !grpChat) { // a fix for cases of "my friendlist is empty"
-			var tagMap = model.userTagMap();
-			var tags = tagMap[uid] || {};
-			tags["FRIEND"] = true;
-			tagMap[uid] = tags;
-			model.userTagMap(tagMap)
-
-			for (var i = 0; i < model.users().length; i++) {
-				// trigger the computed friends() within the users. No idea why
-				// that does not work automatically,
-				// the hierarchy of the computes in this file is ... not easy to
-				// understand
-				model.users()[i].tags(model.users()[i].tags());
-			}
-		}
+		// this fixed my friendlist in one case, in many others it however screwed it over by adding "too many" friends.
+		// sigh....
+//		if (uid && !grpChat) { // a fix for cases of "my friendlist is empty"
+//			var tagMap = model.userTagMap();
+//			var tags = tagMap[uid] || {};
+//			tags["FRIEND"] = true;
+//			tagMap[uid] = tags;
+//			model.userTagMap(tagMap)
+//
+//			for (var i = 0; i < model.users().length; i++) {
+//				// trigger the computed friends() within the users. No idea why
+//				// that does not work automatically,
+//				// the hierarchy of the computes in this file is ... not easy to
+//				// understand
+//				model.users()[i].tags(model.users()[i].tags());
+//			}
+//		}
 		
 		if (grpChat) {
 			if (uid !== model.uberId() || pt !== "unavailable") {
@@ -298,6 +300,11 @@
 		oldCommand(uberid, cmd);
 	};
 	
+	var notifyPlayer = function() {
+		api.game.outOfGameNotification("");
+		api.Panel.message("options_bar", "alertSocial");
+	};
+	
 	model.onGrpChat = function(room, user, stati, content, timestamp) {
 		if (content && user) {
 			var r = model.chatRoomMap()[room];
@@ -316,11 +323,23 @@
 				});
 			}
 			
-			if (content.indexOf(model.displayName()) !== -1 && (new Date().getTime() - timestamp) < 10 * 1000) {
-				api.game.outOfGameNotification("You were mentioned in channel " + room + " by " + userModel.displayNameComputed());
+			if (content.toLowerCase().indexOf(model.displayName().toLowerCase()) !== -1 && (new Date().getTime() - timestamp) < 10 * 1000) {
+				notifyPlayer();
 			}
 		}
 	};
+	
+	model.conversations.subscribe(function(c) {
+		notifyPlayer();
+		for (var i = 0; i < c.length; i++) {
+			if (!c.alertSocialMarked) {
+				c.alertSocialMarked = true;
+				c[i].messageLog.subscribe(function() {
+					notifyPlayer();
+				});
+			}
+		}
+	});
 	
 	var oldSetup = model.setup;
 	model.setup = function() {
@@ -357,11 +376,23 @@
         });
 	};
 	
+
+	var setPresenceForUberbarVisibility = function(v) {
+		if (jabber) {
+			jabber.presenceType(v ? "available" : "dnd");
+		}
+	};
+	
 	var oldJabberAuth = handlers.jabber_authentication;
 	handlers.jabber_authentication = function(payload) {
 		oldJabberAuth(payload);
 		jabber.setGrpMsgHandler(model.onGrpChat);
 		jabber.setConnectHandler(function() {
+			jabber.presenceType.subscribe(function(v) {
+				for (var i = 0; i < model.chatRooms().length; i++) {
+					jabber.setChannelPresence(model.chatRooms()[i].roomName(), v);
+				}
+			});
 			initRank(function() {
 				model.joinChatRoom("halcyon");
 			});
@@ -517,6 +548,7 @@
 			room = model.chatRoomMap()[roomName];
 			room.scrollDown();
 			
+			jabber.setChannelPresence(roomName, jabber.presenceType());
 			
 			// TODO remember last state instead and have a preconfiguration for halcyon
 			if (roomName === "halcyon") {
@@ -556,7 +588,7 @@
 	model.leaveRoom = function(roomName) {
 		var room = model.chatRoomMap()[roomName];
 		if (room) {
-			jabber.leaveGroupChat(room.roomName(), model.displayName());
+			jabber.leaveGroupChat(room.roomName());
 		}
 	}
 	
@@ -567,18 +599,14 @@
 		}
 	}
 	
-	var setPresenceForUberbarVisibility = function(v) {
-		if (jabber) {
-			if (v) {
-				jabber.presenceType("dnd");
-			} else {
-				jabber.presenceType("available");
-			}
-		}
-	};
-	
 	model.showUberBar.subscribe(setPresenceForUberbarVisibility);
 	setPresenceForUberbarVisibility(model.showUberBar());
+	
+	model.showUberBar.subscribe(function() {
+		for (var i = 0; i < model.chatRooms().length; i++) {
+			model.chatRooms()[i].scrollDown();
+		}
+	});
 	
 	model.joinChannelName = ko.observable('');
 	

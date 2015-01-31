@@ -186,19 +186,31 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	
 	/////////// PA CHAT
 	
-	self.leaveGroupChat = function(roomName, name) {
+	var nameInChannels ={};
+	
+	self.leaveGroupChat = function(roomName) {
 		if (!connection.connected || !roomName) {
 			return;
 		}
-		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+name, type: "unavailable"}));
+		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+nameInChannels[roomName], type: "unavailable"}));
+		delete nameInChannels[roomName];
 	};
 	
 	self.joinGroupChat = function(roomName, league, rank, name) {
 		if (!connection.connected || !roomName || !self.jid()) {
 			return;
 		}
+		nameInChannels[roomName] = name;
+		
 		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+name,
 			league: league, rank: rank}));
+	};
+	
+	self.setChannelPresence = function(roomName, presence) {
+		if (!connection.connected || !roomName || !self.jid() || !presence) {
+			return;
+		}
+		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+nameInChannels[roomName]}).c("show").t(presence));
 	};
 	
 	self.sendGroupChat = function(roomName, message) {
@@ -412,6 +424,14 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 				var fullChannelName = undefined;
 				
 				if (isGrpChat) {
+					
+					if (!type) {
+						var show = message.getElementsByTagName("show");
+						if (show && show.length > 0 && Strophe.getText(show[0])) {
+							type = htmlSpecialChars(Strophe.getText(show[0]), true);
+						};
+					}
+					
 					chatRoom = user; // for grp chats the name of the room is in front of the @conference.xmpp....
 					
 					fullChannelName = from;

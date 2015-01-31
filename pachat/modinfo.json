@@ -17,6 +17,10 @@
         	"coui://ui/mods/pachat/jabber.js",
         	"coui://ui/mods/pachat/uberbar.css",
         	"coui://ui/mods/pachat/uberbar.js"
+        ],
+        "live_game_options_bar": [
+        	"coui://ui/mods/pachat/live_game_options_bar.css",
+        	"coui://ui/mods/pachat/live_game_options_bar.js"
         ]
     },
     "date": "2015/1/30",
