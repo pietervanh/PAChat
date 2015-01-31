@@ -394,7 +394,9 @@
 				}
 			});
 			initRank(function() {
-				model.joinChatRoom("halcyon");
+				if (!decode(localStorage["info.nanodesu.pachat.disablechat"])) { // TODO add checkbox in PA Stats
+					model.joinChatRoom("halcyon");
+				}
 			});
 		});
 	};
@@ -469,15 +471,16 @@
 		
 		self.handleCommand = function(cmd) {
 			if (cmd === "/help") {
-				self.writeSystemMessage("You can minimize PA, if somebody will write your name PA will blink.");
+				self.writeSystemMessage("You can minimize PA, if somebody writes your name or private messages you, PA will blink.");
 				self.writeSystemMessage("You can write the beginning of a name and press tab to autocomplete.");
-				self.writeSystemMessage("Available commands, try /help <command> for more info: announcelobby join");
-			} else if (cmd.startsWith("/help announcelobby")) {
-				self.writeSystemMessage("/announcelobby <msg> can be used to advertise a lobby you are currently in. Only works while in a public lobby");
+				self.writeSystemMessage("Check out the modding forums PA Chat thread for more info on this chat");
+				self.writeSystemMessage("Available commands, try /help <command> for more info: join ... yeah more to come"); // TODO: announcelobby
+//			} else if (cmd.startsWith("/help announcelobby")) {
+//				self.writeSystemMessage("/announcelobby <msg> can be used to advertise a lobby you are currently in. Only works while in a public lobby");
 			} else if (cmd.startsWith("/help join")) {
 				self.writeSystemMessage("/join <channelname> joins a chatchannel. If the channel does not exist it will be created");
-			} else if (cmd.startsWith("/announcelobby")) {
-				self.tryAnnounceLobby(cmd.replace("/announcelobby ", ""));
+//			} else if (cmd.startsWith("/announcelobby")) {
+//				self.tryAnnounceLobby(cmd.replace("/announcelobby ", ""));
 			} else if (cmd.startsWith("/join")) {
 				model.joinChatRoom(cmd.replace("/join ", "").trim());
 			} else {
@@ -592,12 +595,18 @@
 		}
 	}
 	
-	var oldContextMenu = model.contextMenuForContact;
-	model.contextMenuForContact = function(data, event) {
+	model.chatRoomContext = function(data, event) {
 		if (event && data && data.uberId() !== model.uberId() && event.type === "contextmenu") { // knockout should do this for me, but somehow it does not?!
-			oldContextMenu(data, event);
+			model.contextMenuForContact(data, event);
+			
+			$('#contextMenu a[data-bind="click: remove"]').parent().remove(); // "remove" has no purpose in the chatroom
+			var ctxMenu = $('#contextMenu');
+			var bottomMissingSpace = ctxMenu.offset().top - $(window).height() + ctxMenu.height()
+			if (bottomMissingSpace > 0) {
+				ctxMenu.css("top", ctxMenu.position().top - bottomMissingSpace);
+			}
 		}
-	}
+	};
 	
 	model.showUberBar.subscribe(setPresenceForUberbarVisibility);
 	setPresenceForUberbarVisibility(model.showUberBar());
@@ -659,28 +668,31 @@
                         <div class="div-chat-room-cont">
                             <div class="div-chat-room-body" data-bind="attr: {id: 'chat_'+roomName()}">
                                 <!-- ko foreach: sortedMessages -->
-                                <div class="chat_message">
-									<span class="chat_message_time" data-bind="text: new Date(time).toLocaleTimeString()"></span>
-                                    <span data-bind="text: user.displayNameComputed(), event: {contextmenu: model.contextMenuForContact(user, event)},
-									css: {'chat-room-user-name': !user.isModerator() && !user.isAdmin(),
-															'chat-room-moderator-name': user.isModerator() && !user.isAdmin(),
-															'chat-room-admin-name': user.isAdmin(),
-															'chat-room-self-name': model.uberId() === user.uberId()}"></span>:
-                                    <span class="chat-msg" data-bind="text: content"></span>
-                                </div>
+	                                <!-- ko if: !user.blocked() || user.isAdmin() || user.isModerator() -->
+	                                <div class="chat_message">
+										<span class="chat_message_time" data-bind="text: new Date(time).toLocaleTimeString()"></span>
+	                                    <span data-bind="text: user.displayNameComputed(), event: {contextmenu: model.chatRoomContext(user, event)},
+										css: {'chat-room-user-name': !user.isModerator() && !user.isAdmin(),
+																'chat-room-moderator-name': user.isModerator() && !user.isAdmin(),
+																'chat-room-admin-name': user.isAdmin(),
+																'chat-room-self-name': model.uberId() === user.uberId()}"></span>:
+	                                    <span class="chat-msg selectable-text" data-bind="text: content"></span>
+	                                </div>
+	                                <!-- /ko -->
                                 <!-- /ko -->
                                 <div data-bind="autoscroll: sortedMessages"></div>
                             </div>
 							<div class="div-chat-room-users ">
 								<!-- ko foreach: sortedUsers -->
-								<div class="chat_user ellipsesoverflow" data-bind="event: {contextmenu: model.contextMenuForContact}">
+								<div class="chat_user ellipsesoverflow" data-bind="event: {contextmenu: model.chatRoomContext}">
 									<div class="status-visual" data-bind="css: { 'online': available, 'offline': offline, 'away': away, 'dnd': dnd }"></div>
 									<!-- ko if: hasLeagueImage -->
 									<img data-placement="right" width="24px" height="20px" data-bind="attr: {src: leagueImg()}, tooltip: displayRank()" />
 									<!-- /ko -->
-									<span data-bind="css: {'chat-room-user-name': !isModerator() && !isAdmin(),
+									<span class="selectable-text" data-bind="css: {'chat-room-user-name': !isModerator() && !isAdmin(),
 															'chat-room-moderator-name': isModerator() && !isAdmin(),
-															'chat-room-admin-name': isAdmin()}, text: displayNameComputed"></span>
+															'chat-room-admin-name': isAdmin(),
+															'chat-room-blocked-name': blocked() && !isAdmin() && !isModerator()}, text: displayNameComputed"></span>
 								</div>
 								<!--/ko -->
 							</div>
@@ -702,6 +714,16 @@
 	
 	
 	
+	
+	// fix a bug that causes "chat" option be displayed while it should not be displayed:
+	$('#contextMenu > .dropdown-menu').children().first().remove();
+	$('#contextMenu > .dropdown-menu').prepend(multiLines(function() {/*!
+        <!-- ko if: (friend() && online()) -->
+        <li><a data-bind="click: startChat" tabindex="-1" href="#"><span class="menu-action">
+            <loc data-i18n="uberbar:chat.message" desc="">Chat</loc>
+        </span></a></li>
+        <!-- /ko -->
+	*/}));
 	
 	
 }());
