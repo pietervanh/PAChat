@@ -255,6 +255,23 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		connection.send(iq);
 	};
 	
+	self.banUser = function(roomName, uberId, reason) {
+		if (!connection.connected || !roomName || !uberId) {
+			return;
+		}
+		var iq = $iq({
+ 			from: self.jid(), to: roomName+"@"+CONFERENCE_URL, type : 'set'
+		}).c(
+			'query', {xmlns : 'http://jabber.org/protocol/muc#admin'}
+		).c(
+			'item', {affiliation : 'outcast',jid : UberidToJid(uberId)}
+		);
+		if (reason) {
+			iq.c('reason').t(reason);
+		}
+		connection.send(iq);
+	};
+	
 	/////////// PA CHAT
 	
 	self.sendCommand = function(uberid, type, payload) {
