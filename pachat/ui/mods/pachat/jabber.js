@@ -220,6 +220,41 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		connection.send($msg({to: roomName+"@"+CONFERENCE_URL, type: "groupchat"}).c('body').t(message));
 	};
 	
+	self.muteUser = function(roomName, nick, reason) {
+		self.adminUser(roomName, nick, 'mute', reason);
+	};
+	
+	self.unMuteUser = function(roomName, nick, reason) {
+		self.adminUser(roomName, nick, 'unmute', reason);
+	};
+	
+	self.kickUser = function(roomName, nick, reason) {
+		self.adminUser(roomName, nick, 'kick', reason);
+	};
+	
+	var operation = { 
+		kick : 'none',
+		mute : 'visitor',
+		unmute : 'participant' 
+	};
+	
+	self.adminUser = function(roomName, nickname, action, reason) {
+		if (!connection.connected || !roomName || !nickname || !operation) {
+			return;
+		}
+		var iq = $iq({
+ 			from: self.jid(), to: roomName+"@"+CONFERENCE_URL, type : 'set'
+		}).c(
+			'query', {xmlns : 'http://jabber.org/protocol/muc#admin'}
+		).c(
+			'item', {nick : nickname, role : operation[action]}
+		);
+		if (reason) {
+			iq.c('reason').t(reason);
+		}
+		connection.send(iq);
+	};
+	
 	/////////// PA CHAT
 	
 	self.sendCommand = function(uberid, type, payload) {
