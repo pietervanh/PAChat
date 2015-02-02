@@ -276,11 +276,11 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	};
 	
 	self.banUser = function(roomName, uberId, reason) {
-		self.setAffiliation(roomName, uberId, 'unban', reason);
+		self.setAffiliation(roomName, uberId, 'ban', reason);
 	};
 	
 	self.unbanUser = function(roomName, uberId, reason) {
-		self.setAffiliation(roomName, uberId, 'ban', reason);
+		self.setAffiliation(roomName, uberId, 'unban', reason);
 	};
 	
 	self.makeAdmin = function(roomName, uberId, reason) {
@@ -290,6 +290,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	self.affiliations = {
 		ban : 'outcast',
 		unban : 'none',
+		none : 'none',
 		admin : 'admin',
 		owner : 'owner'
 	};
