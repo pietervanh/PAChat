@@ -539,7 +539,7 @@
 			self.writeSystemMessage("TODO: IMPLEMENT THIS FUNCTION"); // TODO
 		};
 		
-		var commandList = ['/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banlist', '/unban']; //used in writeHelp
+		var commandList = ['/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banu', '/banlist', '/unban', '/setrole', '/setaffiliation']; //used in writeHelp
 		
 		self.handleCommand = function(cmd) {
 			
@@ -569,6 +569,16 @@
 					self.writeSystemMessage('Error while banning ' + args[0]);
 					self.writeSystemMessage(args[0] + ' has to be in the room!');
 				}
+			} else if (command === "/banu") {
+				var user = self.sortedUsers().filter(function (elem) {return elem.displayName() === cmd.replace('/banu ', '');})[0];
+				if (user) {
+					jabber.banUser(self.roomName(), user.uberId());
+				} 
+				else {
+					self.writeSystemMessage('ERROR');
+					self.writeSystemMessage('Error while banning ' + cmd.replace('/banu ', ''));
+					self.writeSystemMessage(cmd.replace('/banu ', '') + ' has to be in the room!');
+				}
 			} else if (command === "/banlist") {
 				jabber.showBanList(self.roomName());
 			} else if (command === "/unban") {
@@ -581,7 +591,25 @@
 					self.writeSystemMessage('Error while unbanning ' + args[0]);
 					self.writeSystemMessage(args[0] + ' is currently not in the list of banned users of this channel. Use /banlist to refresh the list.');
 				}
-			} else {
+			} else if (command === "/setrole") {
+				jabber.setRole(self.roomName(), args[0], args[1]);
+			} else if (command === "/setaffiliation") {
+				var user = self.sortedUsers().filter(function (elem) {return elem.displayName() === args[0];})[0];
+				if (user) {
+					jabber.setAffiliation(self.roomName(), user.uberId(), args[1], args.slice(2).join(' '));
+				}
+				else if (user = self.bannedUsers().filter(function (elem) {return elem.userModel.displayName() === args[0];})[0]) {
+					jabber.setAffiliation(self.roomName(), user.userModel.uberId(), args[1], args.slice(2).join(' '));
+				} 
+				else {
+					self.writeSystemMessage('ERROR');
+					self.writeSystemMessage('Error while setting ' + args[0] + ' to ' + args[1]);
+					self.writeSystemMessage(args[0] + ' seems to be neighter on the banlist nor in the channel.');
+				}
+			} 
+			
+			
+			else {
 				self.writeSystemMessage("unknown command: "+cmd);
 			}
 		};
@@ -609,13 +637,24 @@
 				self.writeSystemMessage("/unmute <user> [<reason>] unmutes the given user in the current channel. This requires moderator privileges.");
 			}
 			else if (args[0] === 'ban') {
-				self.writeSystemMessage("/ban <user> [<reason>] bans the given user from the current channel. This requires administrator privileges.");
+				self.writeSystemMessage("/ban <user> [<reason>] bans the given user from the current channel.This method does not allow spaces in usernames. This requires administrator privileges.");
+			}
+			else if (args[0] === 'banu') {
+				self.writeSystemMessage("/banu <user> bans the given user from the current channel. This method supports spaces in usernames. This requires administrator privileges.");
 			}
 			else if (args[0] === 'banlist') {
 				self.writeSystemMessage("/banlist prints the list of banned users of the current channel. This requires administrator privileges.");
 			}
 			else if (args[0] === 'unban') {
 				self.writeSystemMessage("/unban <user> unbans the given user from the current channel. The user has to be on the list of banned users of the current channel (see /help banlist). This requires administrator privileges.");
+			}
+			else if (args[0] === 'setrole') {
+				self.writeSystemMessage("/setrole <user> <role> [reason] sets the role of the given user in the current channel. This requires administrator or moderator privileges depending on what you want to do.");
+				self.writeSystemMessage("Available roles are: mute (moderator), unmute (moderator), kick (moderator), mod (admin)");
+			}
+			else if (args[0] === 'setaffiliation') {
+				self.writeSystemMessage("/setaffiliation <user> <affiliation> [reason] sets the affiliation of the given user in the current channel. This requires administrator or owner privileges depending on what you want to do.");
+				self.writeSystemMessage("Available affiliations are: ban (admin), unban (admin), admin (owner),	owner (owner)");
 			}
 		};
 		
