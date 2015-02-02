@@ -397,8 +397,7 @@
 			});
 			initRank(function() {
 				if (!decode(localStorage["info.nanodesu.pachat.disablechat"])) { // TODO add checkbox in PA Stats
-//TODO					model.joinChatRoom("halcyon");
-model.joinChatRoom('pa-global');
+					model.joinChatRoom("halcyon");
 				}
 			});
 		});
