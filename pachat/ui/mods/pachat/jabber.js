@@ -14,7 +14,7 @@ function log(object) {
 function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	var self = this;
 	var connection;
-
+	
 	var MAX_RETRIES = 3;
 	var connection_attempts = 0;
 
@@ -82,6 +82,16 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	var paGrpMsgHandler;
 	self.setGrpMsgHandler = function(handler) {
 		paGrpMsgHandler = handler;
+	};
+	
+	var resultMsgHandler;
+	self.setResultMsgHandler = function(handler) {
+		resultMsgHandler = handler;
+	};
+	
+	var errorMsgHandler;
+	self.setErrorMsgHandler = function(handler) {
+		errorMsgHandler = handler;
 	};
 	
 	var connectHandler;
@@ -220,11 +230,13 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		connection.send($msg({to: roomName+"@"+CONFERENCE_URL, type: "groupchat"}).c('body').t(message));
 	};
 	
+	var adminActions = {};
+	
 	self.muteUser = function(roomName, nick, reason) {
 		self.adminUser(roomName, nick, 'mute', reason);
 	};
 	
-	self.unMuteUser = function(roomName, nick, reason) {
+	self.unmuteUser = function(roomName, nick, reason) {
 		self.adminUser(roomName, nick, 'unmute', reason);
 	};
 	
@@ -252,7 +264,10 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		if (reason) {
 			iq.c('reason').t(reason);
 		}
-		connection.send(iq);
+		
+		var id = connection.sendIQ(iq, onIqSuccess, onIqError);
+		
+		adminActions[id] = {user : nickname, action : action, reason : reason, room : roomName};
 	};
 	
 	self.banUser = function(roomName, uberId, reason) {
@@ -269,7 +284,80 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		if (reason) {
 			iq.c('reason').t(reason);
 		}
-		connection.send(iq);
+		
+		var id = connection.sendIQ(iq, onIqSuccess, onIqError);
+		
+		adminActions[id] = {uberId : uberId, action : 'ban', reason : reason, room : roomName};
+	};
+	
+	self.unbanUser = function(roomName, uberId) {
+		if (!connection.connected || !roomName || !uberId) {
+			return;
+		}
+		var iq = $iq({
+ 			from: self.jid(), to: roomName+"@"+CONFERENCE_URL, type : 'set'
+		}).c(
+			'query', {xmlns : 'http://jabber.org/protocol/muc#admin'}
+		).c(
+			'item', {affiliation : 'none', jid : UberidToJid(uberId)}
+		);
+		
+		var id = connection.sendIQ(iq, onIqSuccess, onIqError);
+		adminActions[id] = {uberId : uberId, action : 'unban', reason : '', room : roomName};
+	};
+	
+	self.showBanList = function(roomName) {
+		if (!connection.connected || !roomName) {
+			return;
+		}
+		var iq = $iq({
+ 			from: self.jid(), to: roomName+"@"+CONFERENCE_URL, type : 'get'
+		}).c(
+			'query', {xmlns : 'http://jabber.org/protocol/muc#admin'}
+		).c(
+			'item', {affiliation : 'outcast'}
+		);
+		
+		var id = connection.sendIQ(iq, onIqSuccess, onIqError);
+		adminActions[id] = {user : '', action : 'banlist', reason : '', room : roomName};
+	};
+	
+	var onIqSuccess = function (message) {
+		var instance = adminActions[message.getAttribute('id')];
+		
+		if (instance.action === 'banlist') {
+			var items = message.firstChild.getElementsByTagName('item');
+			var banned = [];
+			
+			for (var i = 0; i < items.length; i++) {
+				var uberId = JidToUberid(items[i].getAttribute('jid'));
+				var reason = Strophe.getText(items[i].firstChild);
+					
+				reason = reason ? htmlSpecialChars(reason, true) : '';
+					
+				banned.push({uberId : uberId, reason : reason});
+			}
+			resultMsgHandler(instance.room, 'banlist', banned);
+		}
+		else {
+			resultMsgHandler(instance.room, instance.action, {uberId : instance.uberId, user : instance.user, reason : instance.reason});
+		}
+	};
+	
+	var onIqError = function (message) {
+		var instance = adminActions[message.getAttribute('id')];
+		
+		var errors = message.getElementsByTagName('error');
+		var explanation = '';
+		
+		for (var i = 0; i < errors.length; i++) {
+			explanation += 'Failed because ' + errors[i].firstChild.nodeName;
+			explanation +=  errors[i].getElementsByTagName('text')[0] ? '. Explanation: ' + Strophe.getText(errors[i].getElementsByTagName('text')[0]) : '';
+		}
+		
+		console.log(explanation);
+		
+		errorMsgHandler(instance.room, instance.action, {uberId : instance.uberId, user : instance.user,  explanation : explanation} );
 	};
 	
 	/////////// PA CHAT
@@ -534,7 +622,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 			log('!!!PRESENCE error:' + e);
 			return true;
 		}
-	}
+	};
 
 	function onRoster(message) {
 		log("onRoster");
@@ -544,8 +632,24 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 			var to = $(message).attr('to');
 			var xmlns = $(message).attr('xmlns');
 			var id = $(message).attr('id');
-
-			if (message.firstChild) {
+			
+			//PA Chat only results for banned users
+			
+			if (Object.keys(adminActions).indexOf(id) !== -1) {
+				//those are handled in onIqSuccess and onIqError
+				/*
+				if (id === lastShowBanId) {
+					
+				}
+				else {
+					log(message);
+					errorMsgHandler(from.split('@')[0], 'INFO', 'lol'); //TODO
+				}
+				*/
+			}			
+			//PA CHat	
+			
+			else if (message.firstChild) {
 				var items = message.firstChild.getElementsByTagName('item');
 				for (var i = 0; i < items.length; i++) {
 
@@ -587,7 +691,7 @@ if (paPresenceHandler) {
 			log('!!!IQ error:' + e);
 			return true;
 		}
-	}
+	};
 
 	function onMessage(message) {
 		log("onMessageHandler");
