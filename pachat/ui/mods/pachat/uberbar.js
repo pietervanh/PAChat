@@ -409,7 +409,7 @@
 	};
 	
 	model.onErrorMsg = function(roomName, action, errorObj) {
-		if (action === 'banlist') { //non standard handlers here
+		if (action.startsWith('showlisting_')) { //non standard handlers here
 			getOrCreateRoom(roomName).writeSystemMessage('ERROR');
 			getOrCreateRoom(roomName).writeSystemMessage('Error while ' + action);
 			getOrCreateRoom(roomName).writeSystemMessage(errorObj.explanation);
