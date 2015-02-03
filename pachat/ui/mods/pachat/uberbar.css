@@ -12,11 +12,11 @@
 }
 
 .chat-room-moderator-name {
-	color: #0000FF; /* blue */
+	color: #3399FF; /* blue */
 }
 
 .chat-room-admin-name {
-	color: #FF0000 /* red */
+	color: #FF9900 /* orange */
 }
 
 .chat-room-blocked-name {

@@ -8,7 +8,7 @@
 		    }  
 		};
 
-	// had to copy this due to visibility reasons, unmodified function
+	// had to copy this due to visibility reasons, mostly unmodified function
 	/* an ubernet user you have encounterd: includes friends, recent contacts, ignored, blocked */
     function UserViewModel(id) {
         var self = this;
@@ -79,7 +79,7 @@
                    });
         }
 
-        if (!self.hasName())
+        if (!self.hasName() && self.uberId()) // PA CHAT: fix as suggested by mikeyh
             self.requestUserName();
 
         self.startChat = function () {
@@ -267,8 +267,8 @@
 //		}
 		
 		if (grpChat) {
-			var isAdmin = userinfo.affiliation === "owner" || userinfo.affiliation === "admin";
-			var isModerator = userinfo.role === "moderator";
+			var isAdmin = userinfo.affiliation === "owner";
+			var isModerator = userinfo.role === "moderator" || userinfo.affiliation === "admin";
 			if (uid !== model.uberId() || pt !== "unavailable") {
 				var r = model.chatRoomMap()[chatRoom];
 				if (!(r && r.usersMap()[nameInChannel])) {
@@ -401,7 +401,7 @@
 				}
 			});
 			initRank(function() {
-				if (!decode(localStorage["info.nanodesu.pachat.disablechat"])) { // TODO add checkbox in PA Stats
+				if (!decode(localStorage["info.nanodesu.pachat.disablechat"])) {
 					model.joinChatRoom("halcyon");
 				}
 			});
@@ -425,6 +425,7 @@
 	var resultType;
 	var resultObj;
 	var resultRoom;
+	var resultAction;
 	
 	model.onResultMsg = function (roomName, action, resObj) {
 		resultType = action;
@@ -433,7 +434,8 @@
 		
 		self.resuObj = resultObj;
 		
-		if (action === 'banlist') {
+		if (action.startsWith("showlisting_")) {
+			resultAction = action;
 			resultCount = resultObj.length;
 
 			for (var i = 0; i < resultObj.length; i++) {
@@ -448,8 +450,7 @@
 			if (resultCount === 0) {
 				model.onResultDataComplete();
 			}
-		}
-		else {
+		} else {
 			getOrCreateRoom(roomName).writeSystemMessage('SUCCESS');
 			getOrCreateRoom(roomName).writeSystemMessage('Successfully ' + action + ' ' + (resObj.user ? resObj.user : (resObj.uberId ? model.userDisplayNameMap()[resObj.uberId] : 'noOne')) + (resObj.reason ? ' for ' + resObj.reason : ''));
 		}
@@ -467,11 +468,11 @@
 		var room = getOrCreateRoom(resultRoom);
 		room.bannedUsers(resultObj);
 
-		room.writeSystemMessage("Banned users:");
+		room.writeSystemMessage("Users for "+resultAction);
 		for (var i = 0; i < resultObj.length; i++) {
 			room.writeSystemMessage(resultObj[i].userModel.displayName() + ' : ' + (resultObj[i].reason ? resultObj[i].reason : 'no reason provided'));
 		}
-		room.writeSystemMessage("End of banned users");
+		room.writeSystemMessage("End of users");
 	};
 	
 	function ChatRoomModel(roomName) {
@@ -544,13 +545,36 @@
 			self.writeSystemMessage("TODO: IMPLEMENT THIS FUNCTION"); // TODO
 		};
 		
-		var commandList = ['/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banu', '/banlist', '/unban', '/setrole', '/setaffiliation']; //used in writeHelp
+		var commandList = ['/ownerlist', '/adminlist', '/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banlist', '/unban', '/setrole', '/setaffiliation'].sort(function(a, b) {
+			return b.length - a.length;
+		});
+		
+		var cutStart = function(str, cut) {
+			return str.slice(cut.length, str.length);
+		};
 		
 		self.handleCommand = function(cmd) {
+			var command = undefined;
 			
-			data = cmd.split(' ').filter(function (elem) {return elem !== '';});		
-			command = data[0]; 			
-			args = data.slice(1);  
+			for (var i = 0; i < commandList.length; i++) {
+				if (cmd.startsWith(commandList[i])) {
+					command = commandList[i];
+					break;
+				}
+			}
+			
+			var args = cutStart(cmd, command+" ").split(" ");
+			for (var i = 0; i < args.length; i++) {
+				console.log(args);
+				if (args[i].endsWith("\\\\")) {
+					args[i] = args[i].slice(0, args[i].length-1);
+				} else if (args[i].endsWith("\\")) {
+					var wSpace = args[i].slice(0, args[i].length-1)+ " ";
+					args[i] = wSpace + args[i+1];
+					args.splice(i+1, 1);
+					i--;
+				}
+			}
 			
 			if (command === "/help") {
 				 writeHelp(args);	
@@ -559,39 +583,31 @@
 //			} else if (command === "/announcelobby")) {
 //				self.tryAnnounceLobby(args[0]);
 			} else if (command === "/mute") {
-				jabber.muteUser(self.roomName(), args[0], args.slice(1).join(' '));
+				jabber.muteUser(self.roomName(), args[0], args[1]);
 			} else if (command === "/unmute") {
-				jabber.unmuteUser(self.roomName(), args[0], args.slice(1).join(' '));
+				jabber.unmuteUser(self.roomName(), args[0], args[1]);
 			} else if (command === "/kick") {
-				jabber.kickUser(self.roomName(), args[0], args.slice(1).join(' '));
+				jabber.kickUser(self.roomName(), args[0], args[1]);
 			} else if (command === "/ban") {
 				var user = self.sortedUsers().filter(function (elem) {return elem.displayName() === args[0];})[0];
 				if (user) {
-					jabber.banUser(self.roomName(), user.uberId(), args.slice(1).join(' '));
-				} 
-				else {
+					jabber.banUser(self.roomName(), user.uberId(), args[1]);
+				} else {
 					self.writeSystemMessage('ERROR');
 					self.writeSystemMessage('Error while banning ' + args[0]);
 					self.writeSystemMessage(args[0] + ' has to be in the room!');
 				}
-			} else if (command === "/banu") {
-				var user = self.sortedUsers().filter(function (elem) {return elem.displayName() === cmd.replace('/banu ', '');})[0];
-				if (user) {
-					jabber.banUser(self.roomName(), user.uberId());
-				} 
-				else {
-					self.writeSystemMessage('ERROR');
-					self.writeSystemMessage('Error while banning ' + cmd.replace('/banu ', ''));
-					self.writeSystemMessage(cmd.replace('/banu ', '') + ' has to be in the room!');
-				}
 			} else if (command === "/banlist") {
-				jabber.showBanList(self.roomName());
+				jabber.showListing(self.roomName(), "outcast");
+			} else if (command === "/adminlist") {
+				jabber.showListing(self.roomName(), "admin");
+			} else if (command === "/ownerlist") {
+				jabber.showListing(self.roomName(), "owner");
 			} else if (command === "/unban") {
 				var user = self.bannedUsers().filter(function (elem) {return elem.userModel.displayName() === args[0];})[0];
 				if (user && user.userModel) {
-					jabber.unbanUser(self.roomName(), user.userModel.uberId(), args.slice(1).join(' '));
-				} 
-				else {
+					jabber.unbanUser(self.roomName(), user.userModel.uberId(), args[1]);
+				} else {
 					self.writeSystemMessage('ERROR');
 					self.writeSystemMessage('Error while unbanning ' + args[0]);
 					self.writeSystemMessage(args[0] + ' is currently not in the list of banned users of this channel. Use /banlist to refresh the list.');
@@ -601,20 +617,15 @@
 			} else if (command === "/setaffiliation") {
 				var user = self.sortedUsers().filter(function (elem) {return elem.displayName() === args[0];})[0];
 				if (user) {
-					jabber.setAffiliation(self.roomName(), user.uberId(), args[1], args.slice(2).join(' '));
-				}
-				else if (user = self.bannedUsers().filter(function (elem) {return elem.userModel.displayName() === args[0];})[0]) {
-					jabber.setAffiliation(self.roomName(), user.userModel.uberId(), args[1], args.slice(2).join(' '));
-				} 
-				else {
+					jabber.setAffiliation(self.roomName(), user.uberId(), args[1], args[2]);
+				} else if (user = self.bannedUsers().filter(function (elem) {return elem.userModel.displayName() === args[0];})[0]) {
+					jabber.setAffiliation(self.roomName(), user.userModel.uberId(), args[1], args[2]);
+				} else {
 					self.writeSystemMessage('ERROR');
 					self.writeSystemMessage('Error while setting ' + args[0] + ' to ' + args[1]);
-					self.writeSystemMessage(args[0] + ' seems to be neighter on the banlist nor in the channel.');
+					self.writeSystemMessage(args[0] + ' seems to be neither on the banlist nor in the channel.');
 				}
-			} 
-			
-			
-			else {
+			} else {
 				self.writeSystemMessage("unknown command: "+cmd);
 			}
 		};
@@ -624,42 +635,35 @@
 				self.writeSystemMessage("You can minimize PA, if somebody writes your name or private messages you, PA will blink.");
 				self.writeSystemMessage("You can write the beginning of a name and press tab to autocomplete.");
 				self.writeSystemMessage("Check out the modding forums PA Chat thread for more info on this chat.");
+				self.writeSystemMessage("In general when entering commands you can escape spaces with \ if you want to end a parameter in \, use \\ for the last backspace");
+				self.writeSystemMessage("Admins are moderators by default, the moderator role is not persistent");
 				self.writeSystemMessage("Try /help commands for a list of available commands, /help <command> for detailed info on one command.");
-			}
-			else if (args[0] === 'commands') {
+			} else if (args[0] === 'commands') {
 				self.writeSystemMessage("Available commands are: " + commandList.join(', '));
-			}
-			else if (args[0] === 'join') {
+			} else if (args[0] === 'join') {
 				self.writeSystemMessage("/join <channelname> joins a chatchannel. If the channel does not exist it will be created.");
-			}
-			else if (args[0] === 'announcelobby') {
+			} else if (args[0] === 'announcelobby') {
 				self.writeSystemMessage("/announcelobby <msg> can be used to advertise a lobby you are currently in. Only works while in a public lobby.");
-			}
-			else if (args[0] === 'mute') {
-				self.writeSystemMessage("/mute <user> [<reason>] mutes the given user in the current channel. This requires moderator privileges.");
-			}
-			else if (args[0] === 'unmute') {
+			} else if (args[0] === 'mute') {
+				self.writeSystemMessage('/mute <user> [<reason>] mutes the given user in the current channel. This requires moderator privileges.');
+			} else if (args[0] === 'unmute') {
 				self.writeSystemMessage("/unmute <user> [<reason>] unmutes the given user in the current channel. This requires moderator privileges.");
-			}
-			else if (args[0] === 'ban') {
-				self.writeSystemMessage("/ban <user> [<reason>] bans the given user from the current channel.This method does not allow spaces in usernames. This requires administrator privileges.");
-			}
-			else if (args[0] === 'banu') {
-				self.writeSystemMessage("/banu <user> bans the given user from the current channel. This method supports spaces in usernames. This requires administrator privileges.");
-			}
-			else if (args[0] === 'banlist') {
+			} else if (args[0] === 'ban') {
+				self.writeSystemMessage("/ban <user> [<reason>] bans the given user from the current channel. This requires administrator privileges.");
+			} else if (args[0] === 'banlist') {
 				self.writeSystemMessage("/banlist prints the list of banned users of the current channel. This requires administrator privileges.");
-			}
-			else if (args[0] === 'unban') {
+			} else if (args[0] === 'unban') {
 				self.writeSystemMessage("/unban <user> unbans the given user from the current channel. The user has to be on the list of banned users of the current channel (see /help banlist). This requires administrator privileges.");
-			}
-			else if (args[0] === 'setrole') {
+			} else if (args[0] === 'setrole') {
 				self.writeSystemMessage("/setrole <user> <role> [reason] sets the role of the given user in the current channel. This requires administrator or moderator privileges depending on what you want to do.");
-				self.writeSystemMessage("Available roles are: mute (moderator), unmute (moderator), kick (moderator), mod (admin)");
-			}
-			else if (args[0] === 'setaffiliation') {
+				self.writeSystemMessage("Available roles are: visitor (moderator), participant (moderator), none (moderator), moderator (admin)");
+			} else if (args[0] === 'setaffiliation') {
 				self.writeSystemMessage("/setaffiliation <user> <affiliation> [reason] sets the affiliation of the given user in the current channel. This requires administrator or owner privileges depending on what you want to do.");
-				self.writeSystemMessage("Available affiliations are: ban (admin), unban (admin), admin (owner),	owner (owner)");
+				self.writeSystemMessage("Available affiliations are: outcast (admin), none (admin), admin (owner),	owner (owner)");
+			} else if (args[0] === "adminlist") {
+				self.writeSystemMessage("/adminlist prints the list of admins of the current channel. This requires administrator privileges.");
+			} else if (args[0] === "ownerlist") {
+				self.writeSystemMessage("/ownerlist prints the list of owners of the current channel. This requires administrator privileges.");
 			}
 		};
 		

@@ -249,7 +249,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	};
 	
 	self.setRole = function(roomName, nickname, role, reason) {
-		if (!connection.connected || !roomName || !nickname || !action) {
+		if (!connection.connected || !roomName || !nickname || !role) {
 			return;
 		}
 		var iq = $iq({
@@ -281,7 +281,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	};
 	
 	self.setAffiliation = function (roomName, uberId, affiliation, reason) {
-		if (!connection.connected || !roomName || !uberId || !action) {
+		if (!connection.connected || !roomName || !uberId || !affiliation) {
 			return;
 		}
 		var iq = $iq({
@@ -301,6 +301,10 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	};
 	
 	self.showBanList = function(roomName) {
+		self.showListing(roomName, "outcast");
+	};
+	
+	self.showListing = function(roomName, affiliation) {
 		if (!connection.connected || !roomName) {
 			return;
 		}
@@ -309,29 +313,27 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		}).c(
 			'query', {xmlns : 'http://jabber.org/protocol/muc#admin'}
 		).c(
-			'item', {affiliation : 'outcast'}
+			'item', {affiliation : affiliation}
 		);
 		
 		var id = connection.sendIQ(iq, onIqSuccess, onIqError);
-		adminActions[id] = {user : '', action : 'banlist', reason : '', room : roomName};
+		adminActions[id] = {user : '', action : 'showlisting_'+affiliation, reason : '', room : roomName};
 	};
 	
 	var onIqSuccess = function (message) {
 		var instance = adminActions[message.getAttribute('id')];
 		
-		if (instance.action === 'banlist') {
+		if (instance.action.startsWith('showlisting_')) {
 			var items = message.firstChild.getElementsByTagName('item');
 			var banned = [];
 			
 			for (var i = 0; i < items.length; i++) {
 				var uberId = JidToUberid(items[i].getAttribute('jid'));
 				var reason = Strophe.getText(items[i].firstChild);
-					
 				reason = reason ? htmlSpecialChars(reason, true) : '';
-					
 				banned.push({uberId : uberId, reason : reason});
 			}
-			resultMsgHandler(instance.room, 'banlist', banned);
+			resultMsgHandler(instance.room, instance.action, banned);
 		}
 		else {
 			resultMsgHandler(instance.room, instance.action, {uberId : instance.uberId, user : instance.user, reason : instance.reason});
