@@ -233,29 +233,22 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 	var adminActions = {};
 	
 	self.muteUser = function(roomName, nick, reason) {
-		self.setRole(roomName, nick, 'mute', reason);
+		self.setRole(roomName, nick, 'visitor', reason);
 	};
 	
 	self.unmuteUser = function(roomName, nick, reason) {
-		self.setRole(roomName, nick, 'unmute', reason);
+		self.setRole(roomName, nick, 'participant', reason);
 	};
 	
 	self.kickUser = function(roomName, nick, reason) {
-		self.setRole(roomName, nick, 'kick', reason);
+		self.setRole(roomName, nick, 'none', reason);
 	};
 	
 	self.makeModerator = function(roomName, nick, reason) {
-		self.setRole(roomName, nick, 'mod', reason);
-	}; 
-	
-	self.roles = { 
-		kick : 'none',
-		mute : 'visitor',
-		unmute : 'participant',
-		mod : 'moderator'
+		self.setRole(roomName, nick, 'moderator', reason);
 	};
 	
-	self.setRole = function(roomName, nickname, action, reason) {
+	self.setRole = function(roomName, nickname, role, reason) {
 		if (!connection.connected || !roomName || !nickname || !action) {
 			return;
 		}
@@ -264,7 +257,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		}).c(
 			'query', {xmlns : 'http://jabber.org/protocol/muc#admin'}
 		).c(
-			'item', {nick : nickname, role : self.roles[action]}
+			'item', {nick : nickname, role : role}
 		);
 		if (reason) {
 			iq.c('reason').t(reason);
@@ -272,30 +265,22 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		
 		var id = connection.sendIQ(iq, onIqSuccess, onIqError);
 		
-		adminActions[id] = {user : nickname, action : action, reason : reason, room : roomName};
+		adminActions[id] = {user : nickname, action : role, reason : reason, room : roomName};
 	};
 	
 	self.banUser = function(roomName, uberId, reason) {
-		self.setAffiliation(roomName, uberId, 'ban', reason);
+		self.setAffiliation(roomName, uberId, 'outcast', reason);
 	};
 	
 	self.unbanUser = function(roomName, uberId, reason) {
-		self.setAffiliation(roomName, uberId, 'unban', reason);
+		self.setAffiliation(roomName, uberId, 'none', reason);
 	};
 	
 	self.makeAdmin = function(roomName, uberId, reason) {
 		self.setAffiliation(roomName, uberId, 'admin', reason);
 	};
 	
-	self.affiliations = {
-		ban : 'outcast',
-		unban : 'none',
-		none : 'none',
-		admin : 'admin',
-		owner : 'owner'
-	};
-	
-	self.setAffiliation = function (roomName, uberId, action, reason) {
+	self.setAffiliation = function (roomName, uberId, affiliation, reason) {
 		if (!connection.connected || !roomName || !uberId || !action) {
 			return;
 		}
@@ -304,7 +289,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		}).c(
 			'query', {xmlns : 'http://jabber.org/protocol/muc#admin'}
 		).c(
-			'item', {affiliation : self.affiliations[action], jid : UberidToJid(uberId)}
+			'item', {affiliation : affiliation, jid : UberidToJid(uberId)}
 		);
 		if (reason) {
 			iq.c('reason').t(reason);
@@ -312,7 +297,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		
 		var id = connection.sendIQ(iq, onIqSuccess, onIqError);
 		
-		adminActions[id] = {uberId : uberId, action : action, reason : reason, room : roomName};		
+		adminActions[id] = {uberId : uberId, action : affiliation, reason : reason, room : roomName};		
 	};
 	
 	self.showBanList = function(roomName) {
@@ -351,6 +336,8 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		else {
 			resultMsgHandler(instance.room, instance.action, {uberId : instance.uberId, user : instance.user, reason : instance.reason});
 		}
+		
+		delete adminActions[message.getAttribute('id')];
 	};
 	
 	var onIqError = function (message) {
@@ -367,6 +354,8 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		console.log(explanation);
 		
 		errorMsgHandler(instance.room, instance.action, {uberId : instance.uberId, user : instance.user,  explanation : explanation} );
+	
+		delete adminActions[message.getAttribute('id')];
 	};
 	
 	/////////// PA CHAT
