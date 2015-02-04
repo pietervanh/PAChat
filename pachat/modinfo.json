@@ -21,6 +21,9 @@
         "live_game_options_bar": [
         	"coui://ui/mods/pachat/live_game_options_bar.css",
         	"coui://ui/mods/pachat/live_game_options_bar.js"
+        ],
+        "start": [
+        	"coui://ui/mods/pachat/start.js"
         ]
     },
     "date": "2015/1/30",
