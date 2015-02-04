@@ -252,6 +252,8 @@
 		return obj;
 	};
 	
+	model.alignChatLeft = ko.observable().extend({ local: 'alignChatLeft' });
+	
 	var oldPresence = model.onPresence;
 	model.onPresence = function(uid, pt, ps, grpChat, chatRoom, userinfo, stati, nameInChannel) {
 		// this fixed my friendlist in one case, in many others it however screwed it over by adding "too many" friends.
@@ -512,6 +514,10 @@
 			});
 		});
 		
+		self.usersCount = ko.computed(function() {
+			return self.sortedUsers().length;
+		});
+		
 		self.selfIsAdmin = function() {
 			var r = false;
 			_.forEach(self.usersMap(), function(u) {
@@ -573,7 +579,7 @@
 			self.writeSystemMessage("TODO: IMPLEMENT THIS FUNCTION"); // TODO
 		};
 		
-		var commandList = ['/ownerlist', '/adminlist', '/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banlist', '/unban', '/setrole', '/setaffiliation'].sort(function(a, b) {
+		var commandList = ['/alignright', '/alignleft', '/ownerlist', '/adminlist', '/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banlist', '/unban', '/setrole', '/setaffiliation'].sort(function(a, b) {
 			return b.length - a.length;
 		});
 		
@@ -606,6 +612,10 @@
 			
 			if (command === "/help") {
 				 writeHelp(args);	
+			} else if (command === "/alignleft") {
+				model.alignChatLeft(true);
+			} else if (command === "/alignright") {
+				model.alignChatLeft(false);
 			} else if (command === "/join") {
 				model.joinChatRoom(args[0]);
 //			} else if (command === "/announcelobby")) {
@@ -692,6 +702,10 @@
 				self.writeSystemMessage("/adminlist prints the list of admins of the current channel. This requires administrator privileges.");
 			} else if (args[0] === "ownerlist") {
 				self.writeSystemMessage("/ownerlist prints the list of owners of the current channel. This requires administrator privileges.");
+			} else if (args[0] === "alignleft") {
+				self.writeSystemMessage("/alignleft aligns the chatwindows to the left");
+			} else if (args[0] === "alignright") {
+				self.writeSystemMessage("/alignright aligns the chatwindows to the right");
 			}
 		};
 		
@@ -885,11 +899,11 @@
 		
                 <!-- ko foreach: chatRooms -->
                 <div class="div-win" style="margin-bottom:-36px;">
-                    <div class="div-chat-room-window" data-bind="resizable: {minWidth: 300, handles : 'w', resize: function(event,ui) {$('.div-chat-room-window').css('left', 0); scrollDown();}}">
+                    <div class="div-chat-room-window" data-bind="resizable: {minWidth: 300, handles : 'w, e', resize: function(event,ui) {$('.div-chat-room-window').css('left', 0); scrollDown();}}">
                         <div data-bind="css: { 'div-chat-header': !dirtyMention(), 'dirty': dirty() && !dirtyMention(), 'dirtyMention': dirtyMention() }, click: toggleMinimized">
                             <div class="div-chat-room-title">
 								<!-- ko ifnot: minimized -->
-								<div class="div-chat-room-name ellipsesoverflow" data-bind="text: roomName()+' - chat provided by PA Stats. Try /help'"></div>
+								<div class="div-chat-room-name ellipsesoverflow" data-bind="text: roomName()+'('+usersCount()+') - chat provided by PA Stats. Try /help'"></div>
 								<!-- /ko -->
 								<!-- ko if: minimized -->
 								<div class="chat_message_preview">
@@ -959,7 +973,7 @@
 	
 	$('.div-social-canvas > .chat-wrapper').append(chatRoomsHtmlSnip);
 	
-	
+	$('.div-social-canvas > .chat-wrapper').attr("data-bind", "style: {'justify-content': model.alignChatLeft() ? 'flex-start' : 'flex-end'}");
 	
 	
 	
