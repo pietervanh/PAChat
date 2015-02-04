@@ -290,26 +290,25 @@
 	
 	model.alignChatLeft = ko.observable().extend({ local: 'alignChatLeft' });
 	
+	var hackFixFriends = function() {
+		jabber.setNextRosterHandler(function(uid) { // just assume everyone given to this method is a friend
+			var tagMap = model.userTagMap();
+			var tags = tagMap[uid] || {};
+			tags["FRIEND"] = true;
+			tagMap[uid] = tags;
+			model.userTagMap(tagMap)
+			new UserViewModel(uid).requestUserName();
+			for (var i = 0; i < model.users().length; i++) {
+				// trigger the computed friends() within the users. No idea why
+				// that does not work automatically,
+				model.users()[i].tags(model.users()[i].tags());
+			}
+		});
+		jabber.getRoster();
+	};
+	
 	var oldPresence = model.onPresence;
 	model.onPresence = function(uid, pt, ps, grpChat, chatRoom, userinfo, stati, nameInChannel) {
-		// this fixed my friendlist in one case, in many others it however screwed it over by adding "too many" friends.
-		// sigh....
-//		if (uid && !grpChat) { // a fix for cases of "my friendlist is empty"
-//			var tagMap = model.userTagMap();
-//			var tags = tagMap[uid] || {};
-//			tags["FRIEND"] = true;
-//			tagMap[uid] = tags;
-//			model.userTagMap(tagMap)
-//
-//			for (var i = 0; i < model.users().length; i++) {
-//				// trigger the computed friends() within the users. No idea why
-//				// that does not work automatically,
-//				// the hierarchy of the computes in this file is ... not easy to
-//				// understand
-//				model.users()[i].tags(model.users()[i].tags());
-//			}
-//		}
-		
 		if (grpChat) {
 			var isAdmin = userinfo.affiliation === "owner";
 			var isModerator = userinfo.role === "moderator" || userinfo.affiliation === "admin";
@@ -615,7 +614,7 @@
 			self.writeSystemMessage("TODO: IMPLEMENT THIS FUNCTION"); // TODO
 		};
 		
-		var commandList = ['/alignright', '/alignleft', '/ownerlist', '/adminlist', '/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banlist', '/unban', '/setrole', '/setaffiliation'].sort(function(a, b) {
+		var commandList = ['/tryfixfriends', '/alignright', '/alignleft', '/ownerlist', '/adminlist', '/help', '/join', '/mute', '/unmute', '/kick', '/ban', '/banlist', '/unban', '/setrole', '/setaffiliation'].sort(function(a, b) {
 			return b.length - a.length;
 		});
 		
@@ -647,7 +646,9 @@
 			}
 			
 			if (command === "/help") {
-				 writeHelp(args);	
+				 writeHelp(args);
+			} else if (command === "/tryfixfriends") {
+				hackFixFriends();
 			} else if (command === "/alignleft") {
 				model.alignChatLeft(true);
 			} else if (command === "/alignright") {
@@ -742,6 +743,8 @@
 				self.writeSystemMessage("/alignleft aligns the chatwindows to the left");
 			} else if (args[0] === "alignright") {
 				self.writeSystemMessage("/alignright aligns the chatwindows to the right");
+			} else if (args[0] === "tryfixfriends") {
+				self.writeSystemMessage("/tryfixfriends tries to repopulate the friendlist. Only use in case your friendlist is bugged and empty. May work or may not work.");
 			}
 		};
 		

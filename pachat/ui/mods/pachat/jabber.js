@@ -629,6 +629,17 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		}
 	};
 
+	
+	// PA Chat
+	// a hack to attempt to refill the friendlist
+	var nextRosterHandler = undefined;
+	self.setNextRosterHandler = function(h) {
+		nextRosterHandler = h;
+	};
+	
+	
+	// PA Chat
+	
 	function onRoster(message) {
 		log("onRoster");
 		try {
@@ -638,23 +649,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 			var xmlns = $(message).attr('xmlns');
 			var id = $(message).attr('id');
 			
-			//PA Chat only results for banned users
-			
-			if (Object.keys(adminActions).indexOf(id) !== -1) {
-				//those are handled in onIqSuccess and onIqError
-				/*
-				if (id === lastShowBanId) {
-					
-				}
-				else {
-					log(message);
-					errorMsgHandler(from.split('@')[0], 'INFO', 'lol'); //TODO
-				}
-				*/
-			}			
-			//PA CHat	
-			
-			else if (message.firstChild) {
+			if (message.firstChild) {
 				var items = message.firstChild.getElementsByTagName('item');
 				for (var i = 0; i < items.length; i++) {
 
@@ -667,11 +662,12 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 					if (!jabber.rosterMap()[jid])
 						jabber.roster.push(jid);
 					
-// trigger the fix in the presencehandler in uberbar.js. undefined, undefined prevents this from doing anything else
-// so make sure all jabber friends are known as "friends" by PA.
-//if (paPresenceHandler) {
-//	paPresenceHandler(JidToUberid(jid), undefined, undefined, from.indexOf(CONFERENCE_URL) !== -1);
-//}
+					// PA CHAT
+					if (nextRosterHandler && sub === "both") {
+						nextRosterHandler(JidToUberid(jid));
+					}
+					// PA CHAT
+					
 					log('!!!   jid:' + jid + ' name:' + name + ' sub:' + sub
 							+ ' ask:' + ask);
 					connection.send($pres({
@@ -695,6 +691,8 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		catch (e) {
 			log('!!!IQ error:' + e);
 			return true;
+		} finally {
+			nextRosterHandler = undefined;
 		}
 	};
 
