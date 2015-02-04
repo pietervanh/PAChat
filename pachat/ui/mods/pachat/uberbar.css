@@ -4,6 +4,12 @@
     -webkit-box-shadow: inset 0 0 8px rgba(255, 0, 0, 0.8);
 }
 
+span.chat_message_time {
+	color: #666;
+	margin-right: 5px;
+	font-size: 10px;
+}
+
 .dirtyMention {
     background: #700000;
     border: 1px solid #080000;
@@ -43,7 +49,7 @@
 }
 
 .chat-room-self-name {
-	color: #FFFFFF
+	color: #ff00cc
 }
 
 .div-chat-room-window {
