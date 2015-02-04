@@ -47,7 +47,9 @@
 
         self.uberId = ko.observable(id);
         self.displayName = ko.observable(model.userDisplayNameMap()[id]);
-        
+        self.uberName = ko.observable();
+        self.pastatsId = ko.observable();
+
         // modification: fix issues when a chat invite is sent from a contextmenu of a user in a chat.
         // in that case the invite will be started on that object, but the global "user" object in the idToContactMap will be used to answer following requests
         // due to the way "pendingChat" is tracked in the user this will result in an endless message loop between the clients
@@ -114,13 +116,21 @@
                        var result = JSON.parse(data);
                        model.changeDisplayNameForId(id, result.TitleDisplayName);
                        self.displayName(model.userDisplayNameMap()[id]);
+                       self.uberName(result.UberName);
+                       var pastatsprofilelink = 'http://www.pastats.com/report/getplayerid?ubername=' + self.uberName();
+                       $.get(pastatsprofilelink,function(data){
+                         self.pastatsId(data);
+                       });
                    })
                    .fail(function (data) {
                        console.log('ubernet.UserName: fail');
                    });
-        }
+        };
 
         if (!self.hasName() && self.uberId()) // PA CHAT: fix as suggested by mikeyh
+            self.requestUserName();
+
+        if(!self.uberName() && self.uberId())
             self.requestUserName();
 
         self.startChat = function () {
@@ -916,7 +926,12 @@
                             Kick
                         </span></a></li>
                         <!-- /ko -->
-		
+            <!-- ko if: model.contextRoomSelected() && pastatsId() !== ''-->
+              <li><a data-bind="click: function() { inGameBrowser.addSession('PAStats','http://pastats.com/player?player=' + pastatsId())}" href="#" target="_blank"><span class="menu-action">pastats.com</span></a></li>
+            <!-- /ko -->
+            <!-- ko if: model.contextRoomSelected() && pastatsId() !== ''-->
+              <li><a data-bind="click: function() { inGameBrowser.addSession('exodus','http://exodusesports.com?pastats_player_id=' + pastatsId())}" href="#" target="_blank"><span class="menu-action">eXoduseSports.com</span></a></li>
+            <!-- /ko -->
 	*/});
 	
 	
