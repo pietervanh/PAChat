@@ -1,3 +1,18 @@
+.markedline {
+    background: #700000;
+    border: 1px solid #080000;
+    -webkit-box-shadow: inset 0 0 8px rgba(255, 0, 0, 0.8);
+}
+
+.dirtyMention {
+    background: #700000;
+    border: 1px solid #080000;
+    -webkit-box-shadow: inset 0 0 8px rgba(255, 0, 0, 0.8);	
+    height: 28px;
+    display: flex;
+    align-items: center;
+}
+
 .selectable-text {
 	-webkit-user-select: text;
 	user-select: text;
@@ -17,6 +32,10 @@
 
 .chat-room-admin-name {
 	color: #FF9900 /* orange */
+}
+
+.chat-room-muted-name {
+	color: #606060
 }
 
 .chat-room-blocked-name {

@@ -1,4 +1,9 @@
 (function() {
+	// black magic http://stackoverflow.com/questions/805107/creating-multiline-strings-in-javascript/5571069#5571069
+	function multiLines(f) {
+		  return f.toString().replace(/^[^\/]+\/\*!?/, '').replace(/\*\/[^\/]+$/, '');
+	}
+
 	loadScript("coui://ui/main/shared/js/matchmaking_utility.js");
 	
 	ko.bindingHandlers.resizable = {
@@ -210,10 +215,11 @@
     };
     // end of copied code
 	
-	var makeChatRoomUser = function(uberid, admin, mod, league, rank, fullChannelName) {
+	var makeChatRoomUser = function(uberid, admin, mod, muted, league, rank, fullChannelName) {
 		var obj = new UserViewModel(uberid);
 		obj.isModerator = ko.observable(mod);
 		obj.isAdmin = ko.observable(admin);
+		obj.isMuted = ko.observable(muted);
 		obj.league = ko.observable("unranked");
 		obj.leagueImg = ko.computed(function() {
 			return MatchmakingUtility.getSmallBadgeURL(obj.league());
@@ -269,12 +275,14 @@
 		if (grpChat) {
 			var isAdmin = userinfo.affiliation === "owner";
 			var isModerator = userinfo.role === "moderator" || userinfo.affiliation === "admin";
+			var isMuted = userinfo.role === "visitor";
 			if (uid !== model.uberId() || pt !== "unavailable") {
 				var r = model.chatRoomMap()[chatRoom];
 				if (!(r && r.usersMap()[nameInChannel])) {
 					var userModel = makeChatRoomUser(uid, 
 							isAdmin,
 							isModerator,
+							isMuted,
 							userinfo.league,
 							userinfo.rank,
 							nameInChannel);
@@ -284,6 +292,7 @@
 				} else if (r.usersMap()[nameInChannel]){
 					r.usersMap()[nameInChannel].isModerator(isModerator);
 					r.usersMap()[nameInChannel].isAdmin(isAdmin);
+					r.usersMap()[nameInChannel].isMuted(isMuted);
 				}
 			} else {
 				delete model.chatRoomMap()[chatRoom];
@@ -318,7 +327,7 @@
 				userModel = r.usersMap()[user];
 			}
 			if (!userModel) {
-				userModel = makeChatRoomUser(undefined, false, false, undefined, undefined, user);
+				userModel = makeChatRoomUser(undefined, false, false, false, undefined, undefined, user);
 			}
 			if (userModel.displayNameComputed() !== undefined) {
 				model.insertMessageIntoRoom(room, {
@@ -397,7 +406,7 @@
 		jabber.setConnectHandler(function() {
 			jabber.presenceType.subscribe(function(v) {
 				for (var i = 0; i < model.chatRooms().length; i++) {
-					jabber.setChannelPresence(model.chatRooms()[i].roomName(), v);
+					jabber.setChannelPresence(model.chatRooms()[i].roomName(), v, model.myLeague(), model.myRank());
 				}
 			});
 			initRank(function() {
@@ -491,7 +500,7 @@
 		self.lastMessage = ko.computed(function() {
 			return self.sortedMessages()[self.sortedMessages().length-1];
 		});
-		self.usersMap = ko.observable({}); // mapping uberid > chat room UserViewModel
+		self.usersMap = ko.observable({}); // mapping fullChannelName > chat room UserViewModel
 		self.sortedUsers = ko.computed(function() {
 			return _.values(self.usersMap()).sort(function(a, b) {
 				if ((a.isModerator() && b.isModerator())
@@ -502,6 +511,17 @@
 				}
 			});
 		});
+		
+		self.selfIsAdmin = function() {
+			var r = false;
+			_.forEach(self.usersMap(), function(u) {
+				if (u.uberId() === model.uberId()) {
+					r = u.isModerator() || u.isAdmin();
+					return true;
+				}
+			});
+			return r;
+		};
 		
 		self.toggleMinimized = function() {
 			self.minimized(!self.minimized());
@@ -525,11 +545,19 @@
 		};
 		
 		self.addMessage = function(message) {
+			message.mentionsMe = message.content && message.content.toLowerCase().indexOf(model.displayName().toLowerCase()) !== -1 && model.uberId() !== message.user.uberId();
 			self.messages.push(message);
 			self.dirty(self.minimized());
+			self.dirtyMention(self.minimized() && message.mentionsMe);
 		};
 
 		self.dirty = ko.observable(false);
+		self.dirtyMention = ko.observable(false);
+		self.dirty.subscribe(function(v) {
+			if (!v) {
+				self.dirtyMention(false);
+			}
+		});
 		
 		self.messageLine = ko.observable('');
 		self.sendMessageLine = function() {
@@ -633,9 +661,9 @@
 		var writeHelp = function (args) {
 			if (!args[0]) {
 				self.writeSystemMessage("You can minimize PA, if somebody writes your name or private messages you, PA will blink.");
-				self.writeSystemMessage("You can write the beginning of a name and press tab to autocomplete.");
+				self.writeSystemMessage("You can write a part of a name and press tab to autocomplete.");
 				self.writeSystemMessage("Check out the modding forums PA Chat thread for more info on this chat.");
-				self.writeSystemMessage("In general when entering commands you can escape spaces with \ if you want to end a parameter in \, use \\ for the last backspace");
+				self.writeSystemMessage("In general when entering commands you can escape spaces with \\ if you want to end a parameter in \, use \\ for the last backspace");
 				self.writeSystemMessage("Admins are moderators by default, the moderator role is not persistent");
 				self.writeSystemMessage("Try /help commands for a list of available commands, /help <command> for detailed info on one command.");
 			} else if (args[0] === 'commands') {
@@ -672,7 +700,7 @@
 		};
 		
 		self.writeSystemMessage = function(msg) {
-			var fake = makeChatRoomUser(model.uberId(), false, false, undefined, undefined, "");
+			var fake = makeChatRoomUser(model.uberId(), false, false, false, undefined, undefined, "");
 			fake.displayNameComputed = ko.observable("");
 			self.addMessage({
 				user: fake,
@@ -689,7 +717,7 @@
 				if (lastWord) {
 					for (var i = 0; i < self.sortedUsers().length; i++) {
 						var user = self.sortedUsers()[i];
-						if (user.displayNameComputed().startsWith(lastWord)) {
+						if (user.displayNameComputed().toLowerCase().indexOf(lastWord.toLowerCase()) !== -1) {
 							candidates.push(user.displayNameComputed());
 						}
 					}
@@ -730,7 +758,7 @@
 			room = model.chatRoomMap()[roomName];
 			room.scrollDown();
 			
-			jabber.setChannelPresence(roomName, jabber.presenceType());
+			jabber.setChannelPresence(roomName, jabber.presenceType(), model.myLeague(), model.myRank());
 			
 			// TODO remember last state instead and have a preconfiguration for halcyon
 			if (roomName === "halcyon") {
@@ -774,9 +802,18 @@
 		}
 	}
 	
-	model.chatRoomContext = function(data, event) {
+	model.chatRoomContext = function(data, event, roomModel) {
 		if (event && data && data.uberId() !== model.uberId() && event.type === "contextmenu") { // knockout should do this for me, but somehow it does not?!
+			model.contextRoom(roomModel);
+			
 			model.contextMenuForContact(data, event);
+			
+			$(document).bind("click.contexthackhandler", function() {
+				setTimeout(function() {
+					model.contextRoom(undefined);
+				}, 50);
+				$(document).unbind("click.contexthackhandler");
+			});
 			
 			$('#contextMenu a[data-bind="click: remove"]').parent().remove(); // "remove" has no purpose in the chatroom
 			var ctxMenu = $('#contextMenu');
@@ -790,6 +827,11 @@
 	model.showUberBar.subscribe(setPresenceForUberbarVisibility);
 	setPresenceForUberbarVisibility(model.showUberBar());
 	
+	model.contextRoom = ko.observable(undefined);
+	model.contextRoomSelected = ko.computed(function() {
+		return model.contextRoom() !== undefined;
+	});
+	
 	model.showUberBar.subscribe(function() {
 		for (var i = 0; i < model.chatRooms().length; i++) {
 			model.chatRooms()[i].scrollDown();
@@ -798,10 +840,35 @@
 	
 	model.joinChannelName = ko.observable('');
 	
-	// black magic http://stackoverflow.com/questions/805107/creating-multiline-strings-in-javascript/5571069#5571069
-	function multiLines(f) {
-		  return f.toString().replace(/^[^\/]+\/\*!?/, '').replace(/\*\/[^\/]+$/, '');
-	}
+	model.selectedContactIsMuted = ko.computed(function() {
+		return model.selectedContact() && model.selectedContact().isMuted && model.selectedContact().isMuted();
+	});
+	
+	var extendedContextMenuHtml = multiLines(function() {/*!
+		
+		<!-- ko if: model.contextRoomSelected() && model.contextRoom().selfIsAdmin() && !model.selectedContactIsMuted()-->
+                        <li><a data-bind="click: function() {jabber.muteUser(model.contextRoom().roomName(), displayNameComputed())}" tabindex="-1" href="#"><span class="menu-action">
+                            Mute
+                        </span></a></li>
+                        <!-- /ko -->
+
+						<!-- ko if: model.contextRoomSelected() && model.contextRoom().selfIsAdmin() && model.selectedContactIsMuted()-->
+                        <li><a data-bind="click: function() {jabber.unmuteUser(model.contextRoom().roomName(), displayNameComputed())}"  tabindex="-1" href="#"><span class="menu-action">
+                            Unmute
+                        </span></a></li>
+                        <!-- /ko -->
+
+						<!-- ko if: model.contextRoomSelected() && model.contextRoom().selfIsAdmin() -->
+                        <li><a data-bind="click: function() {jabber.kickUser(model.contextRoom().roomName(), displayNameComputed())}" tabindex="-1" href="#"><span class="menu-action">
+                            Kick
+                        </span></a></li>
+                        <!-- /ko -->
+		
+	*/});
+	
+	
+	$('#contextMenu > .dropdown-menu').append(extendedContextMenuHtml);
+	
 	
 	var joinHtmlSnip = multiLines(function(){/*!
 	
@@ -819,7 +886,7 @@
                 <!-- ko foreach: chatRooms -->
                 <div class="div-win" style="margin-bottom:-36px;">
                     <div class="div-chat-room-window" data-bind="resizable: {minWidth: 300, handles : 'w', resize: function(event,ui) {$('.div-chat-room-window').css('left', 0); scrollDown();}}">
-                        <div class="div-chat-header" data-bind="css: { 'dirty': dirty }, click: toggleMinimized">
+                        <div data-bind="css: { 'div-chat-header': !dirtyMention(), 'dirty': dirty() && !dirtyMention(), 'dirtyMention': dirtyMention() }, click: toggleMinimized">
                             <div class="div-chat-room-title">
 								<!-- ko ifnot: minimized -->
 								<div class="div-chat-room-name ellipsesoverflow" data-bind="text: roomName()+' - chat provided by PA Stats. Try /help'"></div>
@@ -848,12 +915,13 @@
                             <div class="div-chat-room-body" data-bind="attr: {id: 'chat_'+roomName()}">
                                 <!-- ko foreach: sortedMessages -->
 	                                <!-- ko if: !user.blocked() || user.isAdmin() || user.isModerator() -->
-	                                <div class="chat_message">
+	                                <div class="chat_message" data-bind="css: {'markedline': mentionsMe}">
 										<span class="chat_message_time" data-bind="text: new Date(time).toLocaleTimeString()"></span>
-	                                    <span data-bind="text: user.displayNameComputed(), event: {contextmenu: model.chatRoomContext(user, event)},
+	                                    <span data-bind="text: user.displayNameComputed(), event: {contextmenu: model.chatRoomContext(user, event, $parent)},
 										css: {'chat-room-user-name': !user.isModerator() && !user.isAdmin(),
 																'chat-room-moderator-name': user.isModerator() && !user.isAdmin(),
 																'chat-room-admin-name': user.isAdmin(),
+																'chat-room-muted-name': user.isMuted(),
 																'chat-room-self-name': model.uberId() === user.uberId()}"></span>:
 	                                    <span class="chat-msg selectable-text" data-bind="text: content"></span>
 	                                </div>
@@ -863,7 +931,7 @@
                             </div>
 							<div class="div-chat-room-users ">
 								<!-- ko foreach: sortedUsers -->
-								<div class="chat_user ellipsesoverflow" data-bind="event: {contextmenu: model.chatRoomContext}">
+								<div class="chat_user ellipsesoverflow" data-bind="event: {contextmenu: model.chatRoomContext($data, event, $parent)}">
 									<div class="status-visual" data-bind="css: { 'online': available, 'offline': offline, 'away': away, 'dnd': dnd }"></div>
 									<!-- ko if: hasLeagueImage -->
 									<img data-placement="right" width="24px" height="20px" data-bind="attr: {src: leagueImg()}, tooltip: displayRank()" />
@@ -871,6 +939,7 @@
 									<span class="selectable-text" data-bind="css: {'chat-room-user-name': !isModerator() && !isAdmin(),
 															'chat-room-moderator-name': isModerator() && !isAdmin(),
 															'chat-room-admin-name': isAdmin(),
+															'chat-room-muted-name': isMuted(),
 															'chat-room-blocked-name': blocked() && !isAdmin() && !isModerator()}, text: displayNameComputed"></span>
 								</div>
 								<!--/ko -->

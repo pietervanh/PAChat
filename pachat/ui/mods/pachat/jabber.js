@@ -202,6 +202,7 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		if (!connection.connected || !roomName) {
 			return;
 		}
+		roomName = roomName.toLowerCase();
 		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+nameInChannels[roomName], type: "unavailable"}));
 		delete nameInChannels[roomName];
 	};
@@ -210,23 +211,27 @@ function Jabberer(uber_id, jabber_token, use_ubernetdev) {
 		if (!connection.connected || !roomName || !self.jid()) {
 			return;
 		}
+		roomName = roomName.toLowerCase();
 		nameInChannels[roomName] = name;
 		
 		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+name,
 			league: league, rank: rank}));
 	};
 	
-	self.setChannelPresence = function(roomName, presence) {
+	self.setChannelPresence = function(roomName, presence, league, rank) {
 		if (!connection.connected || !roomName || !self.jid() || !presence) {
 			return;
 		}
-		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+nameInChannels[roomName]}).c("show").t(presence));
+		roomName = roomName.toLowerCase();
+		connection.send($pres({from: self.jid(), to: roomName+"@"+CONFERENCE_URL+"/"+nameInChannels[roomName],
+			league: league, rank: rank}).c("show").t(presence));
 	};
 	
 	self.sendGroupChat = function(roomName, message) {
 		if (!connection.connected || !roomName || !message) {
 			return;
 		}
+		roomName = roomName.toLowerCase();
 		connection.send($msg({to: roomName+"@"+CONFERENCE_URL, type: "groupchat"}).c('body').t(message));
 	};
 	
