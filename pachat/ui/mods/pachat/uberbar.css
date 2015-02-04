@@ -1,7 +1,7 @@
 .markedline {
-    background: #700000;
+    background: #530505;
     border: 1px solid #080000;
-    -webkit-box-shadow: inset 0 0 8px rgba(255, 0, 0, 0.8);
+    -webkit-box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.8);
 }
 
 span.chat_message_time {
