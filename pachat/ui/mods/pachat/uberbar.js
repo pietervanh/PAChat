@@ -1,4 +1,30 @@
 (function() {
+
+	/**
+	 * scrolls to the bottom if the scrollable view was at the bottom before the value changed
+	 */
+    ko.bindingHandlers.autoscroll = {
+            init: function (element, valueAccessor, allBindingsAccessor, viewModel, bindingContext) {
+            	// right before the value changes, check if the parent of the element was scrolled to the bottom
+            	var wasAtBottom = false;
+            	valueAccessor().subscribe(function() {
+                    if (!element || !element.parentNode)
+                        return;
+                    var p = element.parentNode;
+                    wasAtBottom = p.scrollHeight - p.scrollTop === p.clientHeight;
+            	}, null, "beforeChange");
+            	
+            	// right after the value changed, if the parent of the element was scrolled to the bottom, scroll it to the bottom again
+                valueAccessor().subscribe(function (value) {
+                    if (!element || !element.parentNode)
+                        return;
+                    if (wasAtBottom) {
+                        element.scrollIntoView(true);
+                    }
+                });
+            }
+        };
+	
 	// black magic http://stackoverflow.com/questions/805107/creating-multiline-strings-in-javascript/5571069#5571069
 	function multiLines(f) {
 		  return f.toString().replace(/^[^\/]+\/\*!?/, '').replace(/\*\/[^\/]+$/, '');
@@ -22,9 +48,19 @@
         self.uberId = ko.observable(id);
         self.displayName = ko.observable(model.userDisplayNameMap()[id]);
         
+        // modification: fix issues when a chat invite is sent from a contextmenu of a user in a chat.
+        // in that case the invite will be started on that object, but the global "user" object in the idToContactMap will be used to answer following requests
+        // due to the way "pendingChat" is tracked in the user this will result in an endless message loop between the clients
+        // to prevent this, copy the value of pendingChat from this model over to the global one
+        // a better fix would change the original definition of UserViewModel to remove assumptions about being singleton like global instances
+        var u = model.idToContactMap()[self.uberId()];
+        self.pendingChat = ko.observable(u && u.pendingChat());
+        self.pendingChat.subscribe(function(v) {
+        	var globalUserShadow = model.idToContactMap()[self.uberId()];
+        	globalUserShadow.pendingChat(v);
+        });
+        // end of modifications
         
-        self.pendingChat = ko.observable(false);
-
         self.tags = ko.observable({});
         self.tagList = ko.computed(function () {
             var result = [];
